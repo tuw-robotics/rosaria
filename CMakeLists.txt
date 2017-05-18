@@ -4,7 +4,7 @@ project(rosaria)
 # Load catkin and all dependencies required for this package
 # TODO: remove all from COMPONENTS that are not catkin packages.
 find_package(catkin REQUIRED COMPONENTS message_generation roscpp nav_msgs geometry_msgs sensor_msgs tf
-  dynamic_reconfigure)
+  dynamic_reconfigure tuw_nav_msgs)
 
 # Set the build type.  Options are:
 #  Coverage       : w/ debug symbols, w/o optimization, w/ code-coverage
@@ -12,7 +12,7 @@ find_package(catkin REQUIRED COMPONENTS message_generation roscpp nav_msgs geome
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
-#set(ROS_BUILD_TYPE RelWithDebInfo)
+# set(ROS_BUILD_TYPE Debug)
 
 #set the default path for built executables to the "bin" directory
 #set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)

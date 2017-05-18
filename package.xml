@@ -36,6 +36,8 @@
   <build_depend>tf</build_depend>
   <build_depend>dynamic_reconfigure</build_depend>
   <build_depend>std_srvs</build_depend>
+  <build_depend>tuw_nav_msgs</build_depend>
+  
   <run_depend>libaria</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>nav_msgs</run_depend>
@@ -45,6 +47,7 @@
   <run_depend>tf</run_depend>
   <run_depend>dynamic_reconfigure</run_depend>
   <run_depend>std_srvs</run_depend>
+  <run_depend>tuw_nav_msgs</run_depend>
   <!-- <test_depend>Aria</test_depend>
   <test_depend>roscpp</test_depend>
   <test_depend>nav_msgs</test_depend>

@@ -28,6 +28,8 @@
 
 #include "LaserPublisher.h"
 
+#include <tuw_nav_msgs/JointsIWS.h>
+
 #include <sstream>
 
 
@@ -44,6 +46,7 @@ class RosAriaNode
   public:
     int Setup();
     void cmdvel_cb( const geometry_msgs::TwistConstPtr &);
+    void cmdwh_cb ( const tuw_nav_msgs::JointsIWSConstPtr &);
     //void cmd_enable_motors_cb();
     //void cmd_disable_motors_cb();
     void spin();
@@ -59,6 +62,7 @@ class RosAriaNode
     ros::Publisher sonar_pub;
     ros::Publisher sonar_pointcloud2_pub;
     ros::Publisher voltage_pub;
+    ros::Publisher wheels_measure_pub;
 
     ros::Publisher recharge_state_pub;
     std_msgs::Int8 recharge_state;
@@ -70,6 +74,7 @@ class RosAriaNode
     bool published_motors_state;
 
     ros::Subscriber cmdvel_sub;
+    ros::Subscriber cmdwh_sub;
 
     ros::ServiceServer enable_srv;
     ros::ServiceServer disable_srv;
@@ -77,6 +82,7 @@ class RosAriaNode
     bool disable_motors_cb(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
 
     ros::Time veltime;
+    ros::Time veltime_cmdwh_cb;
 
     std::string serial_port;
     int serial_baud;
@@ -113,6 +119,7 @@ class RosAriaNode
     
     // Robot Parameters
     int TicksMM, DriftFactor, RevCount;  // Odometry Calibration Settings
+    double WheelRadius;
     
     // dynamic_reconfigure
     dynamic_reconfigure::Server<rosaria::RosAriaConfig> *dynamic_reconfigure_server;
@@ -241,6 +248,23 @@ void RosAriaNode::dynamic_reconfigureCB(rosaria::RosAriaConfig &config, uint32_t
     ROS_INFO("Setting RotDecel from Dynamic Reconfigure: %d", value);
     robot->setRotDecel(value);
   } 
+  robot->setAbsoluteMaxTransVel   (10000);
+  robot->setAbsoluteMaxTransNegVel(10000);
+  robot->setTransVelMax           (10000);
+  robot->setTransNegVelMax        (10000);
+//   robot->setTransAccel    (10000);
+//   robot->setTransDecel    (10000);
+//   robot->setLatAccel      (10000);
+//   robot->setLatDecel      (10000);
+//   robot->setLatVelMax     (10000);
+//   robot->setRotVelMax     (10000);
+//   robot->setRotAccel      (10000);
+//   robot->setRotDecel      (10000);
+  
+  
+  WheelRadius = (double)config.WheelDiameter / 2.;
+  
+  
   robot->unlock();
 }
 
@@ -308,6 +332,7 @@ RosAriaNode::RosAriaNode(ros::NodeHandle nh) :
   // other argmuments (optional) are callbacks, or a boolean "latch" flag (whether to send current data to new
   // subscribers when they subscribe).
   // See ros::NodeHandle API docs.
+  wheels_measure_pub = n.advertise<tuw_nav_msgs::JointsIWS>("joint_measures",1000);
   pose_pub = n.advertise<nav_msgs::Odometry>("pose",1000);
   bumpers_pub = n.advertise<rosaria::BumperState>("bumper_state",1000);
   sonar_pub = n.advertise<sensor_msgs::PointCloud>("sonar", 50, 
@@ -331,6 +356,7 @@ RosAriaNode::RosAriaNode(ros::NodeHandle nh) :
   disable_srv = n.advertiseService("disable_motors", &RosAriaNode::disable_motors_cb, this);
   
   veltime = ros::Time::now();
+  veltime_cmdwh_cb = ros::Time::now();
 }
 
 RosAriaNode::~RosAriaNode()
@@ -431,7 +457,7 @@ int RosAriaNode::Setup()
   dynConf_min.DriftFactor = -200;
   dynConf_min.RevCount    = -32760;
   
-  dynamic_reconfigure_server->setConfigMin(dynConf_min);
+//   dynamic_reconfigure_server->setConfigMin(dynConf_min);
   
   
   rosaria::RosAriaConfig dynConf_max;
@@ -449,7 +475,7 @@ int RosAriaNode::Setup()
   dynConf_max.DriftFactor = 200;
   dynConf_max.RevCount    = 32760;
   
-  dynamic_reconfigure_server->setConfigMax(dynConf_max);
+//   dynamic_reconfigure_server->setConfigMax(dynConf_max);
   
   
   rosaria::RosAriaConfig dynConf_default;
@@ -477,6 +503,7 @@ int RosAriaNode::Setup()
 
   // callback will  be called by ArRobot background processing thread for every SIP data packet received from robot
   robot->addSensorInterpTask("ROSPublishingTask", 100, &myPublishCB);
+//   robot->add
 
   // Initialize bumpers with robot number of bumpers
   bumpers.front_bumpers.resize(robot->getNumFrontBumpers());
@@ -516,8 +543,11 @@ int RosAriaNode::Setup()
   // subscribe to command topics
   cmdvel_sub = n.subscribe( "cmd_vel", 1, (boost::function <void(const geometry_msgs::TwistConstPtr&)>)
       boost::bind(&RosAriaNode::cmdvel_cb, this, _1 ));
+  cmdwh_sub = n.subscribe( "joint_cmds", 1, (boost::function <void(const tuw_nav_msgs::JointsIWSConstPtr&)>)
+      boost::bind(&RosAriaNode::cmdwh_cb, this, _1 ));
 
   ROS_INFO_NAMED("rosaria", "rosaria: Setup complete");
+//   robot->run();
   return 0;
 }
 
@@ -540,6 +570,15 @@ void RosAriaNode::publish()
   position.child_frame_id = frame_id_base_link;
   position.header.stamp = ros::Time::now();
   pose_pub.publish(position);
+  
+  static tuw_nav_msgs::JointsIWS wheels_measure;
+  wheels_measure.header.stamp = ros::Time::now();
+  wheels_measure.type_revolute = "measured_velocity";
+  wheels_measure.revolute.resize(2);
+  wheels_measure.revolute[0] = robot->getRightVel() / WheelRadius;
+  wheels_measure.revolute[1] = robot->getLeftVel () / WheelRadius;
+  
+  wheels_measure_pub.publish(wheels_measure);
 
   ROS_DEBUG("RosAria: publish: (time %f) pose x: %f, y: %f, angle: %f; linear vel x: %f, y: %f; angular vel z: %f", 
     position.header.stamp.toSec(), 
@@ -715,6 +754,12 @@ bool RosAriaNode::disable_motors_cb(std_srvs::Empty::Request& request, std_srvs:
 void
 RosAriaNode::cmdvel_cb( const geometry_msgs::TwistConstPtr &msg)
 {
+  
+  ros::Time timenow = ros::Time::now();
+  if ( ros::Duration ( timenow - veltime_cmdwh_cb ).toSec() < 0.5 ) {
+    return;
+  }
+  
   veltime = ros::Time::now();
   ROS_INFO( "new speed: [%0.2f,%0.2f](%0.3f)", msg->linear.x*1e3, msg->angular.z, veltime.toSec() );
 
@@ -726,6 +771,30 @@ RosAriaNode::cmdvel_cb( const geometry_msgs::TwistConstPtr &msg)
   robot->unlock();
   ROS_DEBUG("RosAria: sent vels to to aria (time %f): x vel %f mm/s, y vel %f mm/s, ang vel %f deg/s", veltime.toSec(),
     (double) msg->linear.x * 1e3, (double) msg->linear.y * 1.3, (double) msg->angular.z * 180/M_PI);
+}
+
+void
+RosAriaNode::cmdwh_cb( const tuw_nav_msgs::JointsIWSConstPtr &msg)
+{
+  if ( msg->revolute.size() != 2 ) {
+    ROS_ERROR( "RosAria, in RosAriaNode::cmdwh_cb: messsage does not contain two revolute commands. Will not set the command." );
+    return;
+  }
+  std::string revolute_mode = msg->type_revolute;
+  if ( revolute_mode.compare("cmd_velocity") ) {
+    ROS_ERROR( "RosAria, in RosAriaNode::cmdwh_cb: revolute command type not supported. Will not set the command." );
+    return;
+  }
+  
+  const double vL = msg->revolute[1] * WheelRadius;
+  const double vR = msg->revolute[0] * WheelRadius;
+  veltime = ros::Time::now();
+  veltime_cmdwh_cb = veltime;
+  ROS_INFO( "new wheel speed: [%0.2f,%0.2f](%0.3f)", vL, vR, veltime.toSec() );
+  
+  robot->lock();
+  robot->setVel2(vL, vR);
+  robot->unlock();
 }
 
 
