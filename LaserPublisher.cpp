@@ -10,6 +10,8 @@
 
 #include <math.h>
 
+#include <boost/algorithm/string.hpp>
+
 // TODO publish pointcloud of cumulative readings in separate topic?
 // TODO generic pointcloud sensor publisher (seprate point cloud stuff there)
 // TODO make  similar sonar publisher?
@@ -28,8 +30,10 @@ LaserPublisher::LaserPublisher(ArLaser *_l, ros::NodeHandle& _n, bool _broadcast
   laser->addReadingCB(&laserReadingsCB);
   laser->unlockDevice();
   std::string laserscan_name(laser->getName());
+  boost::erase_all(laserscan_name,".");
   laserscan_name += "_laserscan";
   std::string pointcloud_name(laser->getName());
+  boost::erase_all(pointcloud_name,".");
   pointcloud_name += "_pointcloud";
   laserscan_pub = node.advertise<sensor_msgs::LaserScan>(laserscan_name, 20);
   pointcloud_pub = node.advertise<sensor_msgs::PointCloud>(pointcloud_name, 50);
@@ -104,7 +108,14 @@ void LaserPublisher::publishLaserScan()
     for(std::list<ArSensorReading*>::const_reverse_iterator r = readings->rbegin(); r != readings->rend(); ++r)
     {
       assert(*r);
-      laserscan.ranges[n] = (*r)->getRange() / 1000.0;
+      
+      if ((*r)->getIgnoreThisReading()) {
+	laserscan.ranges[n] = -1;
+      }
+      else {
+	laserscan.ranges[n] = (*r)->getRange() / 1000.0;
+      }
+      
       ++n;
     }
   }
@@ -112,7 +123,14 @@ void LaserPublisher::publishLaserScan()
     for(std::list<ArSensorReading*>::const_iterator r = readings->begin(); r != readings->end(); ++r)
     {
       assert(*r);
-      laserscan.ranges[n] = (*r)->getRange() / 1000.0;
+      
+      if ((*r)->getIgnoreThisReading()) {
+	laserscan.ranges[n] = -1;
+      }
+      else {
+	laserscan.ranges[n] = (*r)->getRange() / 1000.0;
+      }
+      
       ++n;
     }
   }
