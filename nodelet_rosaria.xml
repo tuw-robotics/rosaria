@@ -1,5 +1,5 @@
-<library path="lib/libRosAria">
-  <class name="RosAria" type="RosAriaNode" base_class_type="nodelet::Nodelet">
+<library path="lib/libRosAriaNodelet">
+  <class name="RosAriaNodelet" type="RosAriaNodelet" base_class_type="nodelet::Nodelet">
     <description> 
       RosAria as nodelet
     </description>

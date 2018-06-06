@@ -55,13 +55,16 @@ else()
         endif()
 endif()
 
-add_library(RosAria RosAria.cpp LaserPublisher.cpp)
-add_dependencies(RosAria rosaria_gencfg)
-add_dependencies(RosAria rosaria_gencpp)
+add_library(RosAriaNodelet RosAria.cpp LaserPublisher.cpp)
+add_dependencies(RosAriaNodelet rosaria_gencfg)
+add_dependencies(RosAriaNodelet rosaria_gencpp)
 
-target_link_libraries(RosAria ${catkin_LIBRARIES} ${Boost_LIBRARIES} Aria pthread dl rt)
-set_target_properties(RosAria PROPERTIES COMPILE_FLAGS "-fPIC")
+target_link_libraries(RosAriaNodelet ${catkin_LIBRARIES} ${Boost_LIBRARIES} Aria pthread dl rt)
+set_target_properties(RosAriaNodelet PROPERTIES COMPILE_FLAGS "-fPIC")
 #set_target_properties(RosAria PROPERTIES LINK_FLAGS "-Wl")
+
+add_executable(RosAria RosAriaNode.cpp)
+target_link_libraries(RosAria ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
@@ -82,7 +85,7 @@ catkin_package(
 ## Mark executables and/or libraries for installation
 install(
   TARGETS
-    RosAria
+    RosAriaNodelet
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

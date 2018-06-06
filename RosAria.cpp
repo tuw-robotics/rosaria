@@ -1,155 +1,10 @@
-#include <stdio.h>
-#include <math.h>
-#ifdef ADEPT_PKG
-  #include <Aria.h>
-#else
-  #include <Aria/Aria.h>
-#endif
-#include "ros/ros.h"
-#include "geometry_msgs/Twist.h"
-#include "geometry_msgs/Pose.h"
-#include "geometry_msgs/PoseStamped.h"
-#include <sensor_msgs/PointCloud.h>  //for sonar data
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/point_cloud_conversion.h> // can optionally publish sonar as new type pointcloud2
-#include "nav_msgs/Odometry.h"
-#include "rosaria/BumperState.h"
-#include "tf/tf.h"
-#include "tf/transform_listener.h"  //for tf::getPrefixParam
-#include <tf/transform_broadcaster.h>
-#include "tf/transform_datatypes.h"
-#include <dynamic_reconfigure/server.h>
-#include <rosaria/RosAriaConfig.h>
-#include "std_msgs/Float64.h"
-#include "std_msgs/Float32.h"
-#include "std_msgs/Int8.h"
-#include "std_msgs/Bool.h"
-#include "std_srvs/Empty.h"
+#include "RosAria.h"
 
-#include "LaserPublisher.h"
-
-#include <nodelet/nodelet.h>
-#include <pluginlib/class_list_macros.h>
-
-#include <tuw_nav_msgs/JointsIWS.h>
-
-#include <sstream>
-
-
-/** @brief Node that interfaces between ROS and mobile robot base features via ARIA library. 
-
-    RosAriaNode will use ARIA to connect to a robot controller (configure via
-    ~port parameter), either direct serial connection or over the network.  It 
-    runs ARIA's robot communications cycle in a background thread, and
-    as part of that cycle (a sensor interpretation task which calls RosAriaNode::publish()),
-    it  publishes various topics with newly received robot
-    data.  It also sends velocity commands to the robot when received in the
-    cmd_vel topic, and handles dynamic_reconfigure and Service requests.
-
-    For more information about ARIA see
-    http://robots.mobilerobots.com/wiki/Aria.
-
-    RosAria uses the roscpp client library, see http://www.ros.org/wiki/roscpp for
-    information, tutorials and documentation.
-*/
-class RosAriaNode : public nodelet::Nodelet
-{
-  public:
-    RosAriaNode();
-    virtual ~RosAriaNode();
-    
-  public:
-    int Setup();
-    void cmdvel_cb( const geometry_msgs::TwistConstPtr &);
-    void cmdwh_cb ( const tuw_nav_msgs::JointsIWSConstPtr &);
-    void cmdvel_watchdog(const ros::TimerEvent& event);
-    //void cmd_enable_motors_cb();
-    //void cmd_disable_motors_cb();
-    void spin();
-    void publish();
-    void sonarConnectCb();
-    void dynamic_reconfigureCB(rosaria::RosAriaConfig &config, uint32_t level);
-    void readParameters();
-    virtual void onInit();
-
-  protected:
-    ros::Publisher pose_pub;
-    ros::Publisher bumpers_pub;
-    ros::Publisher sonar_pub;
-    ros::Publisher sonar_pointcloud2_pub;
-    ros::Publisher voltage_pub;
-    ros::Publisher wheels_measure_pub;
-
-    ros::Publisher recharge_state_pub;
-    std_msgs::Int8 recharge_state;
-
-    ros::Publisher state_of_charge_pub;
-
-    ros::Publisher motors_state_pub;
-    std_msgs::Bool motors_state;
-    bool published_motors_state;
-
-    ros::Subscriber cmdvel_sub;
-    ros::Subscriber cmdwh_sub;
-
-    ros::ServiceServer enable_srv;
-    ros::ServiceServer disable_srv;
-    bool enable_motors_cb(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
-    bool disable_motors_cb(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response);
-
-    ros::Time veltime;
-    ros::Time veltime_cmdwh_cb;
-    ros::Timer cmdvel_watchdog_timer;
-    ros::Duration cmdvel_timeout;
-
-    std::string serial_port;
-    int serial_baud;
-
-    ArRobotConnector *conn;
-    ArLaserConnector *laserConnector;
-    ArRobot *robot;
-    nav_msgs::Odometry position;
-    rosaria::BumperState bumpers;
-    ArPose pos;
-    ArFunctorC<RosAriaNode> myPublishCB;
-    //ArRobot::ChargeState batteryCharge;
-
-    //for odom->base_link transform
-    tf::TransformBroadcaster odom_broadcaster;
-    geometry_msgs::TransformStamped odom_trans;
-    
-    std::string frame_id_odom;
-    std::string frame_id_base_link;
-    std::string frame_id_bumper;
-    std::string frame_id_sonar;
-
-    // flag indicating whether sonar was enabled or disabled on the robot
-    bool sonar_enabled; 
-
-    // enable and publish sonar topics. set to true when first subscriber connects, set to false when last subscriber disconnects. 
-    bool publish_sonar; 
-    bool publish_sonar_pointcloud2;
-
-    // Debug Aria
-    bool debug_aria;
-    std::string aria_log_filename;
-    
-    // Robot Calibration Parameters (see readParameters() function)
-    int TicksMM, DriftFactor, RevCount;  //If TicksMM or RevCount are <0, don't use. If DriftFactor is -99999, don't use (DriftFactor could be 0 or negative).
-    double WheelRadius;
-    
-    // dynamic_reconfigure
-    dynamic_reconfigure::Server<rosaria::RosAriaConfig> *dynamic_reconfigure_server;
-
-    // whether to publish aria lasers
-    bool publish_aria_lasers;
-};
-
-RosAriaNode::RosAriaNode()
+RosAriaNodelet::RosAriaNodelet()
 {
 }
 
-void RosAriaNode::readParameters()
+void RosAriaNodelet::readParameters()
 {
   // Robot Parameters. If a parameter was given and is nonzero, set it now.
   // Otherwise, get default value for this robot (from getOrigRobotConfig()).
@@ -193,7 +48,7 @@ void RosAriaNode::readParameters()
   robot->unlock();
 }
 
-void RosAriaNode::dynamic_reconfigureCB(rosaria::RosAriaConfig &config, uint32_t level)
+void RosAriaNodelet::dynamic_reconfigureCB(rosaria::RosAriaConfig &config, uint32_t level)
 {
   //
   // Odometry Settings
@@ -274,7 +129,7 @@ void RosAriaNode::dynamic_reconfigureCB(rosaria::RosAriaConfig &config, uint32_t
 }
 
 /// Called when another node subscribes or unsubscribes from sonar topic.
-void RosAriaNode::sonarConnectCb()
+void RosAriaNodelet::sonarConnectCb()
 {
   publish_sonar = (sonar_pub.getNumSubscribers() > 0);
   publish_sonar_pointcloud2 = (sonar_pointcloud2_pub.getNumSubscribers() > 0);
@@ -292,7 +147,7 @@ void RosAriaNode::sonarConnectCb()
   robot->unlock();
 }
 
-RosAriaNode::~RosAriaNode()
+RosAriaNodelet::~RosAriaNodelet()
 {
   // disable motors and sonar.
   robot->disableMotors();
@@ -303,7 +158,7 @@ RosAriaNode::~RosAriaNode()
   Aria::shutdown();
 }
 
-int RosAriaNode::Setup()
+int RosAriaNodelet::Setup()
 {
   // Note, various objects are allocated here which are never deleted (freed), since Setup() is only supposed to be
   // called once per instance, and these objects need to persist until the process terminates.
@@ -313,7 +168,7 @@ int RosAriaNode::Setup()
   ArArgumentParser *argparser = new ArArgumentParser(args); // Warning never freed
   argparser->loadDefaultArguments(); // adds any arguments given in /etc/Aria.args.  Useful on robots with unusual serial port or baud rate (e.g. pioneer lx)
 
-  // Now add any parameters given via ros params (see RosAriaNode constructor):
+  // Now add any parameters given via ros params (see RosAriaNodelet constructor):
 
   // if serial port parameter contains a ':' character, then interpret it as hostname:tcpport
   // for wireless serial connection. Otherwise, interpret it as a serial port name.
@@ -415,7 +270,7 @@ int RosAriaNode::Setup()
   
   dynamic_reconfigure_server->setConfigDefault(dynConf_default);
   
-  dynamic_reconfigure_server->setCallback(boost::bind(&RosAriaNode::dynamic_reconfigureCB, this, _1, _2));
+  dynamic_reconfigure_server->setCallback(boost::bind(&RosAriaNodelet::dynamic_reconfigureCB, this, _1, _2));
 
 
   // Enable the motors
@@ -465,28 +320,28 @@ int RosAriaNode::Setup()
     
   // subscribe to command topics
   cmdvel_sub = getPrivateNodeHandle().subscribe( "cmd_vel", 1, (boost::function <void(const geometry_msgs::TwistConstPtr&)>)
-      boost::bind(&RosAriaNode::cmdvel_cb, this, _1 ));
+      boost::bind(&RosAriaNodelet::cmdvel_cb, this, _1 ));
   cmdwh_sub = getPrivateNodeHandle().subscribe( "joint_cmds", 1, (boost::function <void(const tuw_nav_msgs::JointsIWSConstPtr&)>)
-      boost::bind(&RosAriaNode::cmdwh_cb, this, _1 ));
+      boost::bind(&RosAriaNodelet::cmdwh_cb, this, _1 ));
 
   // register a watchdog for cmd_vel timeout
   double cmdvel_timeout_param = 0.6;
   getPrivateNodeHandle().param("cmd_vel_timeout", cmdvel_timeout_param, 0.6);
   cmdvel_timeout = ros::Duration(cmdvel_timeout_param);
   if (cmdvel_timeout_param > 0.0)
-    cmdvel_watchdog_timer = getPrivateNodeHandle().createTimer(ros::Duration(0.1), &RosAriaNode::cmdvel_watchdog, this);
+    cmdvel_watchdog_timer = getPrivateNodeHandle().createTimer(ros::Duration(0.1), &RosAriaNodelet::cmdvel_watchdog, this);
 
   ROS_INFO_NAMED("rosaria", "rosaria: Setup complete");
 //   robot->run();
   return 0;
 }
 
-void RosAriaNode::spin()
+void RosAriaNodelet::spin()
 {
   ros::spin();
 }
 
-void RosAriaNode::publish()
+void RosAriaNodelet::publish()
 {
   // Note, this is called via SensorInterpTask callback (myPublishCB, named "ROSPublishingTask"). ArRobot object 'robot' sholud not be locked or unlocked.
   pos = robot->getPose();
@@ -658,7 +513,7 @@ void RosAriaNode::publish()
   } // end if sonar_enabled
 }
 
-bool RosAriaNode::enable_motors_cb(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
+bool RosAriaNodelet::enable_motors_cb(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
 {
     ROS_INFO("RosAria: Enable motors request.");
     robot->lock();
@@ -670,7 +525,7 @@ bool RosAriaNode::enable_motors_cb(std_srvs::Empty::Request& request, std_srvs::
     return true;
 }
 
-bool RosAriaNode::disable_motors_cb(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
+bool RosAriaNodelet::disable_motors_cb(std_srvs::Empty::Request& request, std_srvs::Empty::Response& response)
 {
     ROS_INFO("RosAria: Disable motors request.");
     robot->lock();
@@ -681,7 +536,7 @@ bool RosAriaNode::disable_motors_cb(std_srvs::Empty::Request& request, std_srvs:
 }
 
 void
-RosAriaNode::cmdvel_cb( const geometry_msgs::TwistConstPtr &msg)
+RosAriaNodelet::cmdvel_cb( const geometry_msgs::TwistConstPtr &msg)
 {
   
   ros::Time timenow = ros::Time::now();
@@ -703,15 +558,15 @@ RosAriaNode::cmdvel_cb( const geometry_msgs::TwistConstPtr &msg)
 }
 
 void
-RosAriaNode::cmdwh_cb( const tuw_nav_msgs::JointsIWSConstPtr &msg)
+RosAriaNodelet::cmdwh_cb( const tuw_nav_msgs::JointsIWSConstPtr &msg)
 {
   if ( msg->revolute.size() != 2 ) {
-    ROS_ERROR( "RosAria, in RosAriaNode::cmdwh_cb: messsage does not contain two revolute commands. Will not set the command." );
+    ROS_ERROR( "RosAria, in RosAriaNodelet::cmdwh_cb: messsage does not contain two revolute commands. Will not set the command." );
     return;
   }
   std::string revolute_mode = msg->type_revolute;
   if ( revolute_mode.compare("cmd_velocity") ) {
-    ROS_ERROR( "RosAria, in RosAriaNode::cmdwh_cb: revolute command type not supported. Will not set the command." );
+    ROS_ERROR( "RosAria, in RosAriaNodelet::cmdwh_cb: revolute command type not supported. Will not set the command." );
     return;
   }
   
@@ -726,7 +581,7 @@ RosAriaNode::cmdwh_cb( const tuw_nav_msgs::JointsIWSConstPtr &msg)
   robot->unlock();
 }
 
-void RosAriaNode::cmdvel_watchdog(const ros::TimerEvent& event)
+void RosAriaNodelet::cmdvel_watchdog(const ros::TimerEvent& event)
 {
   // stop robot if no cmd_vel message was received for 0.6 seconds
   if (ros::Time::now() - veltime > ros::Duration(0.6))
@@ -740,7 +595,7 @@ void RosAriaNode::cmdvel_watchdog(const ros::TimerEvent& event)
   }
 }
 
-void RosAriaNode::onInit()
+void RosAriaNodelet::onInit()
 {
   Aria::init();
 
@@ -749,7 +604,7 @@ void RosAriaNode::onInit()
   conn = NULL;
   laserConnector = NULL;
   robot = NULL;
-  myPublishCB = ArFunctorC<RosAriaNode>(this, &RosAriaNode::publish);
+  myPublishCB = ArFunctorC<RosAriaNodelet>(this, &RosAriaNodelet::publish);
   sonar_enabled = false;
   publish_sonar = false;
   publish_sonar_pointcloud2 = false;
@@ -791,11 +646,11 @@ void RosAriaNode::onInit()
   pose_pub = getPrivateNodeHandle().advertise<nav_msgs::Odometry>("pose",1000);
   bumpers_pub = getPrivateNodeHandle().advertise<rosaria::BumperState>("bumper_state",1000);
   sonar_pub = getPrivateNodeHandle().advertise<sensor_msgs::PointCloud>("sonar", 50,
-      boost::bind(&RosAriaNode::sonarConnectCb, this),
-      boost::bind(&RosAriaNode::sonarConnectCb, this));
+      boost::bind(&RosAriaNodelet::sonarConnectCb, this),
+      boost::bind(&RosAriaNodelet::sonarConnectCb, this));
   sonar_pointcloud2_pub = getPrivateNodeHandle().advertise<sensor_msgs::PointCloud2>("sonar_pointcloud2", 50,
-      boost::bind(&RosAriaNode::sonarConnectCb, this),
-      boost::bind(&RosAriaNode::sonarConnectCb, this));
+      boost::bind(&RosAriaNodelet::sonarConnectCb, this),
+      boost::bind(&RosAriaNodelet::sonarConnectCb, this));
 
   voltage_pub = getPrivateNodeHandle().advertise<std_msgs::Float64>("battery_voltage", 1000);
   recharge_state_pub = getPrivateNodeHandle().advertise<std_msgs::Int8>("battery_recharge_state", 5, true /*latch*/ );
@@ -807,8 +662,8 @@ void RosAriaNode::onInit()
   published_motors_state = false;
 
   // advertise enable/disable services
-  enable_srv = getPrivateNodeHandle().advertiseService("enable_motors", &RosAriaNode::enable_motors_cb, this);
-  disable_srv = getPrivateNodeHandle().advertiseService("disable_motors", &RosAriaNode::disable_motors_cb, this);
+  enable_srv = getPrivateNodeHandle().advertiseService("enable_motors", &RosAriaNodelet::enable_motors_cb, this);
+  disable_srv = getPrivateNodeHandle().advertiseService("disable_motors", &RosAriaNodelet::disable_motors_cb, this);
 
   veltime = ros::Time::now();
   veltime_cmdwh_cb = ros::Time::now();
@@ -821,4 +676,4 @@ void RosAriaNode::onInit()
   }
 }
 
-PLUGINLIB_EXPORT_CLASS(RosAriaNode, nodelet::Nodelet)
+PLUGINLIB_EXPORT_CLASS(RosAriaNodelet, nodelet::Nodelet)
