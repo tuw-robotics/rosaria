@@ -36,18 +36,19 @@
   <build_depend>tf</build_depend>
   <build_depend>dynamic_reconfigure</build_depend>
   <build_depend>std_srvs</build_depend>
-  <build_depend>tuw_nav_msgs</build_depend>
-  
   <run_depend>libaria</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>nav_msgs</run_depend>
   <run_depend>geometry_msgs</run_depend>
   <run_depend>sensor_msgs</run_depend>
   <build_depend>std_msgs</build_depend>
+  <build_depend>nodelet</build_depend>
+  <build_depend>pluginlib</build_depend>
+  <run_depend>pluginlib</run_depend>
+  <run_depend>nodelet</run_depend>
   <run_depend>tf</run_depend>
   <run_depend>dynamic_reconfigure</run_depend>
   <run_depend>std_srvs</run_depend>
-  <run_depend>tuw_nav_msgs</run_depend>
   <!-- <test_depend>Aria</test_depend>
   <test_depend>roscpp</test_depend>
   <test_depend>nav_msgs</test_depend>
@@ -56,6 +57,6 @@
   <test_depend>tf</test_depend> -->
 
   <export>
-
+    <nodelet plugin="${prefix}/nodelet_rosaria.xml"/>
   </export>
 </package>

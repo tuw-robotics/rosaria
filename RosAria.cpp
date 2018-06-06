@@ -28,6 +28,9 @@
 
 #include "LaserPublisher.h"
 
+#include <nodelet/nodelet.h>
+#include <pluginlib/class_list_macros.h>
+
 #include <tuw_nav_msgs/JointsIWS.h>
 
 #include <sstream>
@@ -49,10 +52,10 @@
     RosAria uses the roscpp client library, see http://www.ros.org/wiki/roscpp for
     information, tutorials and documentation.
 */
-class RosAriaNode
+class RosAriaNode : public nodelet::Nodelet
 {
   public:
-    RosAriaNode(ros::NodeHandle n);
+    RosAriaNode();
     virtual ~RosAriaNode();
     
   public:
@@ -67,9 +70,9 @@ class RosAriaNode
     void sonarConnectCb();
     void dynamic_reconfigureCB(rosaria::RosAriaConfig &config, uint32_t level);
     void readParameters();
+    virtual void onInit();
 
   protected:
-    ros::NodeHandle n;
     ros::Publisher pose_pub;
     ros::Publisher bumpers_pub;
     ros::Publisher sonar_pub;
@@ -142,14 +145,17 @@ class RosAriaNode
     bool publish_aria_lasers;
 };
 
+RosAriaNode::RosAriaNode()
+{
+}
+
 void RosAriaNode::readParameters()
 {
   // Robot Parameters. If a parameter was given and is nonzero, set it now.
   // Otherwise, get default value for this robot (from getOrigRobotConfig()).
   // Parameter values are stored in member variables for possible later use by the user with dynamic reconfigure.
   robot->lock();
-  ros::NodeHandle n_("~");
-  if (n_.getParam("TicksMM", TicksMM) && TicksMM > 0)
+  if (getPrivateNodeHandle().getParam("TicksMM", TicksMM) && TicksMM > 0)
   {
     ROS_INFO("Setting robot TicksMM from ROS Parameter: %d", TicksMM);
     robot->comInt(93, TicksMM);
@@ -161,7 +167,7 @@ void RosAriaNode::readParameters()
     //n_.setParam( "TicksMM", TicksMM);
   }
   
-  if (n_.getParam("DriftFactor", DriftFactor) && DriftFactor != -99999)
+  if (getPrivateNodeHandle().getParam("DriftFactor", DriftFactor) && DriftFactor != -99999)
   {
     ROS_INFO("Setting robot DriftFactor from ROS Parameter: %d", DriftFactor);
     robot->comInt(89, DriftFactor);
@@ -173,7 +179,7 @@ void RosAriaNode::readParameters()
     //n_.setParam( "DriftFactor", DriftFactor);
   }
   
-  if (n_.getParam("RevCount", RevCount) && RevCount > 0)
+  if (getPrivateNodeHandle().getParam("RevCount", RevCount) && RevCount > 0)
   {
     ROS_INFO("Setting robot RevCount from ROS Parameter: %d", RevCount);
     robot->comInt(88, RevCount);
@@ -284,71 +290,6 @@ void RosAriaNode::sonarConnectCb()
     sonar_enabled = true;
   }
   robot->unlock();
-}
-
-RosAriaNode::RosAriaNode(ros::NodeHandle nh) : 
-  n(nh),
-  serial_port(""), serial_baud(0), 
-  conn(NULL), laserConnector(NULL), robot(NULL),
-  myPublishCB(this, &RosAriaNode::publish),
-  sonar_enabled(false), publish_sonar(false), publish_sonar_pointcloud2(false),
-  debug_aria(false), 
-  TicksMM(-1), DriftFactor(-99999), RevCount(-1),
-  publish_aria_lasers(false)
-{
-  // read in runtime parameters
-
-  // port and baud
-  n.param( "port", serial_port, std::string("/dev/ttyUSB0") );
-  ROS_INFO( "RosAria: set port: [%s]", serial_port.c_str() );
-
-  n.param("baud", serial_baud, 0);
-  if(serial_baud != 0)
-    ROS_INFO("RosAria: set serial port baud rate %d", serial_baud);
-
-  // handle debugging more elegantly
-  n.param( "debug_aria", debug_aria, false ); // default not to debug
-  n.param( "aria_log_filename", aria_log_filename, std::string("Aria.log") );
-
-  // whether to connect to lasers using aria
-  n.param("publish_aria_lasers", publish_aria_lasers, false);
-
-  // Get frame_ids to use.
-  n.param("odom_frame", frame_id_odom, std::string("odom"));
-  n.param("base_link_frame", frame_id_base_link, std::string("base_link"));
-  n.param("bumpers_frame", frame_id_bumper, std::string("bumpers"));
-  n.param("sonar_frame", frame_id_sonar, std::string("sonar"));
-
-  // advertise services for data topics
-  // second argument to advertise() is queue size.
-  // other argmuments (optional) are callbacks, or a boolean "latch" flag (whether to send current data to new
-  // subscribers when they subscribe).
-  // See ros::NodeHandle API docs.
-  wheels_measure_pub = n.advertise<tuw_nav_msgs::JointsIWS>("joint_measures",1000);
-  pose_pub = n.advertise<nav_msgs::Odometry>("pose",1000);
-  bumpers_pub = n.advertise<rosaria::BumperState>("bumper_state",1000);
-  sonar_pub = n.advertise<sensor_msgs::PointCloud>("sonar", 50, 
-      boost::bind(&RosAriaNode::sonarConnectCb, this),
-      boost::bind(&RosAriaNode::sonarConnectCb, this));
-  sonar_pointcloud2_pub = n.advertise<sensor_msgs::PointCloud2>("sonar_pointcloud2", 50,
-      boost::bind(&RosAriaNode::sonarConnectCb, this),
-      boost::bind(&RosAriaNode::sonarConnectCb, this));
-
-  voltage_pub = n.advertise<std_msgs::Float64>("battery_voltage", 1000);
-  recharge_state_pub = n.advertise<std_msgs::Int8>("battery_recharge_state", 5, true /*latch*/ );
-  recharge_state.data = -2;
-  state_of_charge_pub = n.advertise<std_msgs::Float32>("battery_state_of_charge", 100);
-
-  motors_state_pub = n.advertise<std_msgs::Bool>("motors_state", 5, true /*latch*/ );
-  motors_state.data = false;
-  published_motors_state = false;
-
-  // advertise enable/disable services
-  enable_srv = n.advertiseService("enable_motors", &RosAriaNode::enable_motors_cb, this);
-  disable_srv = n.advertiseService("disable_motors", &RosAriaNode::disable_motors_cb, this);
-  
-  veltime = ros::Time::now();
-  veltime_cmdwh_cb = ros::Time::now();
 }
 
 RosAriaNode::~RosAriaNode()
@@ -516,24 +457,24 @@ int RosAriaNode::Setup()
         tfname += ln; 
       tfname += "_frame";
       ROS_INFO_NAMED("rosaria", "rosaria: Creating publisher for laser #%d named %s with tf frame name %s", ln, l->getName(), tfname.c_str());
-      new LaserPublisher(l, n, true, tfname);
+      new LaserPublisher(l, getPrivateNodeHandle(), true, tfname);
     }
     robot->unlock();
     ROS_INFO_NAMED("rosaria", "rosaria: Done creating laser publishers");
   }
     
   // subscribe to command topics
-  cmdvel_sub = n.subscribe( "cmd_vel", 1, (boost::function <void(const geometry_msgs::TwistConstPtr&)>)
+  cmdvel_sub = getPrivateNodeHandle().subscribe( "cmd_vel", 1, (boost::function <void(const geometry_msgs::TwistConstPtr&)>)
       boost::bind(&RosAriaNode::cmdvel_cb, this, _1 ));
-  cmdwh_sub = n.subscribe( "joint_cmds", 1, (boost::function <void(const tuw_nav_msgs::JointsIWSConstPtr&)>)
+  cmdwh_sub = getPrivateNodeHandle().subscribe( "joint_cmds", 1, (boost::function <void(const tuw_nav_msgs::JointsIWSConstPtr&)>)
       boost::bind(&RosAriaNode::cmdwh_cb, this, _1 ));
 
   // register a watchdog for cmd_vel timeout
   double cmdvel_timeout_param = 0.6;
-  n.param("cmd_vel_timeout", cmdvel_timeout_param, 0.6);
+  getPrivateNodeHandle().param("cmd_vel_timeout", cmdvel_timeout_param, 0.6);
   cmdvel_timeout = ros::Duration(cmdvel_timeout_param);
   if (cmdvel_timeout_param > 0.0)
-    cmdvel_watchdog_timer = n.createTimer(ros::Duration(0.1), &RosAriaNode::cmdvel_watchdog, this);
+    cmdvel_watchdog_timer = getPrivateNodeHandle().createTimer(ros::Duration(0.1), &RosAriaNode::cmdvel_watchdog, this);
 
   ROS_INFO_NAMED("rosaria", "rosaria: Setup complete");
 //   robot->run();
@@ -799,26 +740,85 @@ void RosAriaNode::cmdvel_watchdog(const ros::TimerEvent& event)
   }
 }
 
-
-int main( int argc, char** argv )
+void RosAriaNode::onInit()
 {
-  ros::init(argc,argv, "RosAria");
-  ros::NodeHandle n(std::string("~"));
   Aria::init();
 
-  RosAriaNode *node = new RosAriaNode(n);
+  serial_port = std::string("");
+  serial_baud = 0;
+  conn = NULL;
+  laserConnector = NULL;
+  robot = NULL;
+  myPublishCB = ArFunctorC<RosAriaNode>(this, &RosAriaNode::publish);
+  sonar_enabled = false;
+  publish_sonar = false;
+  publish_sonar_pointcloud2 = false;
+  debug_aria = false;
+  TicksMM = -1;
+  DriftFactor = -99999;
+  RevCount = -1;
+  publish_aria_lasers = false;
 
-  if( node->Setup() != 0 )
+  // read in runtime parameters
+
+  // port and baud
+  getPrivateNodeHandle().param( "port", serial_port, std::string("/dev/ttyUSB0") );
+  ROS_INFO( "RosAria: set port: [%s]", serial_port.c_str() );
+
+  getPrivateNodeHandle().param("baud", serial_baud, 0);
+  if(serial_baud != 0)
+    ROS_INFO("RosAria: set serial port baud rate %d", serial_baud);
+
+  // handle debugging more elegantly
+  getPrivateNodeHandle().param( "debug_aria", debug_aria, false ); // default not to debug
+  getPrivateNodeHandle().param( "aria_log_filename", aria_log_filename, std::string("Aria.log") );
+
+  // whether to connect to lasers using aria
+  getPrivateNodeHandle().param("publish_aria_lasers", publish_aria_lasers, false);
+
+  // Get frame_ids to use.
+  getPrivateNodeHandle().param("odom_frame", frame_id_odom, std::string("odom"));
+  getPrivateNodeHandle().param("base_link_frame", frame_id_base_link, std::string("base_link"));
+  getPrivateNodeHandle().param("bumpers_frame", frame_id_bumper, std::string("bumpers"));
+  getPrivateNodeHandle().param("sonar_frame", frame_id_sonar, std::string("sonar"));
+
+  // advertise services for data topics
+  // second argument to advertise() is queue size.
+  // other argmuments (optional) are callbacks, or a boolean "latch" flag (whether to send current data to new
+  // subscribers when they subscribe).
+  // See ros::NodeHandle API docs.
+  wheels_measure_pub = getPrivateNodeHandle().advertise<tuw_nav_msgs::JointsIWS>("joint_measures",1000);
+  pose_pub = getPrivateNodeHandle().advertise<nav_msgs::Odometry>("pose",1000);
+  bumpers_pub = getPrivateNodeHandle().advertise<rosaria::BumperState>("bumper_state",1000);
+  sonar_pub = getPrivateNodeHandle().advertise<sensor_msgs::PointCloud>("sonar", 50,
+      boost::bind(&RosAriaNode::sonarConnectCb, this),
+      boost::bind(&RosAriaNode::sonarConnectCb, this));
+  sonar_pointcloud2_pub = getPrivateNodeHandle().advertise<sensor_msgs::PointCloud2>("sonar_pointcloud2", 50,
+      boost::bind(&RosAriaNode::sonarConnectCb, this),
+      boost::bind(&RosAriaNode::sonarConnectCb, this));
+
+  voltage_pub = getPrivateNodeHandle().advertise<std_msgs::Float64>("battery_voltage", 1000);
+  recharge_state_pub = getPrivateNodeHandle().advertise<std_msgs::Int8>("battery_recharge_state", 5, true /*latch*/ );
+  recharge_state.data = -2;
+  state_of_charge_pub = getPrivateNodeHandle().advertise<std_msgs::Float32>("battery_state_of_charge", 100);
+
+  motors_state_pub = getPrivateNodeHandle().advertise<std_msgs::Bool>("motors_state", 5, true /*latch*/ );
+  motors_state.data = false;
+  published_motors_state = false;
+
+  // advertise enable/disable services
+  enable_srv = getPrivateNodeHandle().advertiseService("enable_motors", &RosAriaNode::enable_motors_cb, this);
+  disable_srv = getPrivateNodeHandle().advertiseService("disable_motors", &RosAriaNode::disable_motors_cb, this);
+
+  veltime = ros::Time::now();
+  veltime_cmdwh_cb = ros::Time::now();
+
+  if( Setup() != 0 )
   {
     ROS_FATAL( "RosAria: ROS node setup failed... \n" );
-    return -1;
+    ros::shutdown();
+    std::exit(-1);
   }
-
-  node->spin();
-
-  delete node;
-
-  ROS_INFO( "RosAria: Quitting... \n" );
-  return 0;
-  
 }
+
+PLUGINLIB_EXPORT_CLASS(RosAriaNode, nodelet::Nodelet)

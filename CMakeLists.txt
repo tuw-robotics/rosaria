@@ -4,7 +4,7 @@ project(rosaria)
 # Load catkin and all dependencies required for this package
 # TODO: remove all from COMPONENTS that are not catkin packages.
 find_package(catkin REQUIRED COMPONENTS message_generation roscpp nav_msgs geometry_msgs sensor_msgs tf
-  dynamic_reconfigure tuw_nav_msgs)
+  dynamic_reconfigure nodelet)
 
 # Set the build type.  Options are:
 #  Coverage       : w/ debug symbols, w/o optimization, w/ code-coverage
@@ -12,7 +12,7 @@ find_package(catkin REQUIRED COMPONENTS message_generation roscpp nav_msgs geome
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
-# set(ROS_BUILD_TYPE Debug)
+#set(ROS_BUILD_TYPE RelWithDebInfo)
 
 #set the default path for built executables to the "bin" directory
 #set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
@@ -41,21 +41,21 @@ include_directories(${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} )
 
 find_package(Aria QUIET)
 if(Aria_FOUND)
-	if(EXISTS "${Aria_INCLUDE_DIRS}/Aria.h")
-		add_definitions(-DADEPT_PKG)
-	endif()
+        if(EXISTS "${Aria_INCLUDE_DIRS}/Aria.h")
+                add_definitions(-DADEPT_PKG)
+        endif()
   include_directories(${Aria_INCLUDE_DIRS})
   link_directories(${Aria_LIBRARY_DIRS})
 else()
-	# The installation package provided by Adept doesn't follow Debian policies
-	if(EXISTS "/usr/local/Aria/include/Aria.h")
-	  add_definitions(-DADEPT_PKG)
-	  include_directories( /usr/local/Aria/include)
-	  link_directories(/usr/local/Aria/lib)
-	endif()
+        # The installation package provided by Adept doesn't follow Debian policies
+        if(EXISTS "/usr/local/Aria/include/Aria.h")
+          add_definitions(-DADEPT_PKG)
+          include_directories( /usr/local/Aria/include)
+          link_directories(/usr/local/Aria/lib)
+        endif()
 endif()
 
-add_executable(RosAria RosAria.cpp LaserPublisher.cpp)
+add_library(RosAria RosAria.cpp LaserPublisher.cpp)
 add_dependencies(RosAria rosaria_gencfg)
 add_dependencies(RosAria rosaria_gencpp)
 
@@ -72,7 +72,7 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-    DEPENDS roscpp nav_msgs geometry_msgs sensor_msgs tf
+    DEPENDS roscpp nav_msgs geometry_msgs sensor_msgs tf nodelet
 )
 
 #############
@@ -81,9 +81,12 @@ catkin_package(
 
 ## Mark executables and/or libraries for installation
 install(
-  TARGETS 
+  TARGETS
     RosAria
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
+
+install(FILES nodelet_rosaria.xml
+    DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
