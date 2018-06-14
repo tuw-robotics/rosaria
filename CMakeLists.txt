@@ -64,6 +64,8 @@ set_target_properties(RosAriaNodelet PROPERTIES COMPILE_FLAGS "-fPIC")
 #set_target_properties(RosAria PROPERTIES LINK_FLAGS "-Wl")
 
 add_executable(RosAria RosAriaNode.cpp)
+add_dependencies(RosAria rosaria_gencpp)
+add_dependencies(RosAria rosaria_gencfg)
 target_link_libraries(RosAria ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 
 ## Generate added messages and services with any dependencies listed here
