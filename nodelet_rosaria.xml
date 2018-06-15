@@ -1,0 +1,7 @@
+<library path="lib/libRosAriaNodelet">
+  <class name="RosAriaNodelet" type="RosAriaNodelet" base_class_type="nodelet::Nodelet">
+    <description> 
+      RosAria as nodelet
+    </description>
+  </class>
+</library>
