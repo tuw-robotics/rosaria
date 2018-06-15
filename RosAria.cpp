@@ -596,7 +596,6 @@ void RosAriaNodelet::onInit()
   // other argmuments (optional) are callbacks, or a boolean "latch" flag (whether to send current data to new
   // subscribers when they subscribe).
   // See ros::NodeHandle API docs.
-  wheels_measure_pub = getPrivateNodeHandle().advertise<tuw_nav_msgs::JointsIWS>("joint_measures",1000);
   pose_pub = getPrivateNodeHandle().advertise<nav_msgs::Odometry>("pose",1000);
   bumpers_pub = getPrivateNodeHandle().advertise<rosaria::BumperState>("bumper_state",1000);
   sonar_pub = getPrivateNodeHandle().advertise<sensor_msgs::PointCloud>("sonar", 50,

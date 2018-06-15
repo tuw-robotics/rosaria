@@ -34,8 +34,6 @@
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
 
-#include <tuw_nav_msgs/JointsIWS.h>
-
 #include <sstream>
 
 
@@ -64,7 +62,6 @@ class RosAriaNodelet : public nodelet::Nodelet
   public:
     int Setup();
     void cmdvel_cb( const geometry_msgs::TwistConstPtr &);
-    void cmdwh_cb ( const tuw_nav_msgs::JointsIWSConstPtr &);
     void cmdvel_watchdog(const ros::TimerEvent& event);
     //void cmd_enable_motors_cb();
     //void cmd_disable_motors_cb();
@@ -81,7 +78,6 @@ class RosAriaNodelet : public nodelet::Nodelet
     ros::Publisher sonar_pub;
     ros::Publisher sonar_pointcloud2_pub;
     ros::Publisher voltage_pub;
-    ros::Publisher wheels_measure_pub;
 
     ros::Publisher recharge_state_pub;
     std_msgs::Int8 recharge_state;
@@ -93,7 +89,6 @@ class RosAriaNodelet : public nodelet::Nodelet
     bool published_motors_state;
 
     ros::Subscriber cmdvel_sub;
-    ros::Subscriber cmdwh_sub;
 
     ros::ServiceServer enable_srv;
     ros::ServiceServer disable_srv;
